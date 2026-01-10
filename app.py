@@ -1,67 +1,82 @@
 import streamlit as st
 import pandas as pd
-import joblib
+import pickle
 
-# -----------------------------
-# Load model & helpers
-# -----------------------------
-model = joblib.load("models/winner_model.pkl")
-feature_columns = joblib.load("models/feature_columns.pkl")
-label_encoder = joblib.load("models/label_encoder.pkl")
+# ---------------- LOAD MODELS ----------------
+winner_model = pickle.load(open("models/winner_model.pkl", "rb"))
+le = pickle.load(open("models/label_encoder.pkl", "rb"))
+winner_features = pickle.load(open("models/feature_columns.pkl", "rb"))
 
-team_df = pd.read_csv("data/team_features_normalized.csv")
+score_1 = pickle.load(open("models/first_innings_model.pkl", "rb"))
+score_2 = pickle.load(open("models/second_innings_model.pkl", "rb"))
 
-teams = sorted(team_df["team"].unique())
+# ---------------- LOAD DATA ----------------
+players_df = pd.read_csv("data/player_stats_normalized.csv")
+teams_df = pd.read_csv("data/team_features_normalized.csv")
 
-st.set_page_config(page_title="IPL Match Predictor", layout="centered")
-st.title("🏏 IPL Match Winner Predictor")
+# ---------------- UI ----------------
+st.title("🏏 IPL Match Predictor")
 
-# -----------------------------
-# Team Selection
-# -----------------------------
-st.subheader("Select Teams")
-
-team1 = st.selectbox("Team 1", teams)
-team2 = st.selectbox("Team 2", [t for t in teams if t != team1])
-
-# -----------------------------
-# Match Conditions
-# -----------------------------
-st.subheader("Match Conditions")
+team1 = st.selectbox("Select Team 1", teams_df["team"].unique())
+team2 = st.selectbox("Select Team 2", teams_df["team"].unique())
 
 toss_winner = st.selectbox("Toss Winner", [team1, team2])
 batting_first = st.selectbox("Batting First", [team1, team2])
-first_innings_score = st.slider("First Innings Score", 100, 260, 160)
 
-# -----------------------------
-# Fetch team stats
-# -----------------------------
-team1_stats = team_df[team_df["team"] == team1].add_prefix("team1_")
-team2_stats = team_df[team_df["team"] == team2].add_prefix("team2_")
+st.subheader("Select Playing XI (Not used yet)")
 
-input_df = pd.concat([team1_stats.reset_index(drop=True),
-                      team2_stats.reset_index(drop=True)], axis=1)
+xi_team1 = st.multiselect("Playing XI - Team 1", players_df["Player"].unique(), max_selections=11)
+xi_team2 = st.multiselect("Playing XI - Team 2", players_df["Player"].unique(), max_selections=11)
 
-# -----------------------------
-# Add match-level features
-# -----------------------------
-input_df["toss_winner_team1"] = int(toss_winner == team1)
-input_df["batting_first_team1"] = int(batting_first == team1)
-input_df["first_innings_score"] = first_innings_score
+# ---------------- PREDICTION ----------------
+if st.button("Predict Match"):
+    t1 = teams_df[teams_df["team"] == team1].iloc[0]
+    t2 = teams_df[teams_df["team"] == team2].iloc[0]
 
-# -----------------------------
-# Match training feature order
-# -----------------------------
-for col in feature_columns:
-    if col not in input_df.columns:
-        input_df[col] = 0
+    # ✅ 1. MASTER INPUT DF (ALL FEATURES)
+    input_df = pd.DataFrame([{
+        "team_1_enc": le.transform([team1])[0],
+        "team_2_enc": le.transform([team2])[0],
+        "toss_winner_enc": le.transform([toss_winner])[0],
+        "batting_first_enc": 1 if batting_first == team1 else 0,
 
-input_df = input_df[feature_columns]
+        "batting_rating_t1": t1["batting_rating"],
+        "bowling_rating_t1": t1["bowling_rating"],
+        "batting_rating_t2": t2["batting_rating"],
+        "bowling_rating_t2": t2["bowling_rating"],
 
-# -----------------------------
-# Prediction
-# -----------------------------
-if st.button("Predict Winner"):
-    pred = model.predict(input_df)[0]
-    winner = label_encoder.inverse_transform([pred])[0]
-    st.success(f"🏆 Predicted Winner: **{winner}**")
+        "avg_score_last_5_t1": t1["avg_score_last_5"],
+        "avg_score_last_5_t2": t2["avg_score_last_5"],
+    }])
+
+    # ✅ 2. WINNER MODEL INPUT (ONLY TRAINED FEATURES)
+    winner_input = input_df[winner_features]
+
+    winner = winner_model.predict(winner_input)[0]
+    prob = max(winner_model.predict_proba(winner_input)[0]) * 100
+
+    # ✅ 3. SCORE MODEL INPUT (ONLY TRAINED FEATURES)
+    score_features = [
+        "batting_rating_t1", "bowling_rating_t2",
+        "batting_rating_t2", "bowling_rating_t1",
+        "avg_score_last_5_t1", "avg_score_last_5_t2"
+    ]
+
+    score_input = input_df[score_features]
+
+    s1 = int(score_1.predict(score_input)[0])
+    s2 = int(score_2.predict(score_input)[0])
+    # ---------------- CRICKET LOGIC FIX ----------------
+
+    # Identify batting second team
+    batting_second = team2 if batting_first == team1 else team1
+
+    # If chasing team wins, second innings must be higher
+    if winner == batting_second and s2 <= s1:
+        s2 = s1 + int(abs(s1 - s2) * 0.6) + 1
+
+    # ---------------- OUTPUT ----------------
+    st.success(f"🏆 Predicted Winner: {winner}")
+    st.info(f"📊 Winning Probability: {prob:.2f}%")
+    st.write(f"🏏 First Innings Score: {s1}")
+    st.write(f"🏏 Second Innings Score: {s2}")
