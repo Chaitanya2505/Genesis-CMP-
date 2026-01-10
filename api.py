@@ -57,60 +57,48 @@ def get_teams():
 @app.post("/predict")
 def predict(data: PredictionInput):
     try:
-        # A. Encode Inputs
-        t1_enc = le.transform([data.team1])[0]
-        t2_enc = le.transform([data.team2])[0]
-        toss_enc = le.transform([data.toss_winner])[0]
-        
-        if data.toss_decision == "Bat":
-            bat_first = data.toss_winner
-        else:
-            bat_first = data.team1 if data.toss_winner == data.team2 else data.team2
-            
-        bat_first_enc = 1 if bat_first == data.team1 else 0
+        # ---------------- ENCODE TEAMS ----------------
+        team1 = data.team1.strip()
+        team2 = data.team2.strip()
+        toss_winner = data.toss_winner.strip()
 
-        # B. Get Stats
-        row_t1 = teams_df[teams_df['team'] == data.team1].iloc[0]
-        row_t2 = teams_df[teams_df['team'] == data.team2].iloc[0]
+        t1 = teams_df[teams_df["team"] == team1].iloc[0]
+        t2 = teams_df[teams_df["team"] == team2].iloc[0]
 
-        # C. Build DataFrame
-        input_data = {
-            'team_1_enc': t1_enc,
-            'team_2_enc': t2_enc,
-            'toss_winner_enc': toss_enc,
-            'batting_first_enc': bat_first_enc,
-            'batting_rating_t1': row_t1['batting_rating'],
-            'bowling_rating_t1': row_t1['bowling_rating'],
-            'avg_score_last_5_t1': row_t1['avg_score_last_5'],
-            'batting_rating_t2': row_t2['batting_rating'],
-            'bowling_rating_t2': row_t2['bowling_rating'],
-            'avg_score_last_5_t2': row_t2['avg_score_last_5']
-        }
+        input_df = pd.DataFrame([{
+            "team_1_enc": le.transform([team1])[0],
+            "team_2_enc": le.transform([team2])[0],
+            "toss_winner_enc": le.transform([toss_winner])[0],
+            "batting_first_enc": 1 if data.toss_decision == "Bat" else 0,
 
-        df = pd.DataFrame([input_data])
-        
-        # Add missing columns
-        for col in feature_cols:
-            if col not in df.columns:
-                df[col] = 0
-        df = df[feature_cols]
+            "batting_rating_t1": t1["batting_rating"],
+            "bowling_rating_t1": t1["bowling_rating"],
+            "avg_score_last_5_t1": t1["avg_score_last_5"],
 
-        # D. Predict
-        # win_pred = winner_model.predict(df)[0]
-        # win_prob = float(winner_model.predict_proba(df).max() * 100)
-        # winner_name = le.inverse_transform([win_pred])[0]
-        winner_name = winner_model.predict(df)[0]
-        proba = winner_model.predict_proba(df)[0]
-        win_prob = round(float(max(proba) * 100), 2)
+            "batting_rating_t2": t2["batting_rating"],
+            "bowling_rating_t2": t2["bowling_rating"],
+            "avg_score_last_5_t2": t2["avg_score_last_5"],
+        }])
 
+        # ---------------- WINNER MODEL ----------------
+        winner_input = input_df[feature_cols]
+        winner = winner_model.predict(winner_input)[0]
+        prob = round(float(max(winner_model.predict_proba(winner_input)[0]) * 100), 2)
 
-        
-        s1 = int(score_1.predict(df)[0])
-        s2 = int(score_2.predict(df)[0])
+        # ---------------- SCORE MODELS ----------------
+        score_features = [
+            "batting_rating_t1", "bowling_rating_t2",
+            "batting_rating_t2", "bowling_rating_t1",
+            "avg_score_last_5_t1", "avg_score_last_5_t2"
+        ]
+
+        score_input = input_df[score_features]
+        s1 = int(score_1.predict(score_input)[0])
+        s2 = int(score_2.predict(score_input)[0])
 
         return {
-            "winner": winner_name,
-            "probability": win_prob,
+            "winner": winner,
+            "probability": prob,
             "score_inning_1": s1,
             "score_inning_2": s2
         }
