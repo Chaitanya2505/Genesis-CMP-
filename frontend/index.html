@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Genesis IPL Predictor</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background-image: url('https://wallpaperaccess.com/full/1088620.jpg');
+            background-size: cover;
+            background-attachment: fixed;
+        }
+        .glass {
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(10px);
+        }
+    </style>
+</head>
+<body class="flex items-center justify-center min-h-screen">
+
+    <div class="glass p-8 rounded-xl shadow-2xl w-full max-w-lg">
+        <h1 class="text-3xl font-bold text-center text-blue-900 mb-6">🏏 IPL Predictor</h1>
+
+        <div class="space-y-4">
+            
+            <div>
+                <label class="block font-semibold text-gray-700">Home Team</label>
+                <select id="team1" class="w-full p-3 border rounded-lg" onchange="updateTossOptions()">
+                    <option>Loading teams...</option>
+                </select>
+            </div>
+
+            <div>
+                <label class="block font-semibold text-gray-700">Away Team</label>
+                <select id="team2" class="w-full p-3 border rounded-lg" onchange="updateTossOptions()">
+                    <option>Loading teams...</option>
+                </select>
+            </div>
+
+            <div class="flex gap-4">
+                <div class="w-1/2">
+                    <label class="block font-semibold text-gray-700">Toss Winner</label>
+                    <select id="toss_winner" class="w-full p-3 border rounded-lg"></select>
+                </div>
+                <div class="w-1/2">
+                    <label class="block font-semibold text-gray-700">Decision</label>
+                    <select id="toss_decision" class="w-full p-3 border rounded-lg">
+                        <option value="Bat">Bat</option>
+                        <option value="Field">Field</option>
+                    </select>
+                </div>
+            </div>
+
+            <button onclick="predictMatch()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg transition">
+                🚀 Predict Winner
+            </button>
+        </div>
+
+        <div id="result" class="hidden mt-6 p-4 bg-green-100 border-l-4 border-green-500 rounded text-center">
+            <h2 class="text-xl font-bold text-green-800">Winner: <span id="winner_name">CSK</span></h2>
+            <p class="text-gray-700">Probability: <span id="win_prob" class="font-bold">85%</span></p>
+            <div class="flex justify-between mt-4 text-sm text-gray-600">
+                <p>1st Innings: <span id="s1" class="font-bold">180</span></p>
+                <p>2nd Innings: <span id="s2" class="font-bold">175</span></p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = "http://127.0.0.1:8000";
+
+        // 1. Load Teams on Page Load
+        window.onload = async function() {
+            try {
+                const response = await fetch(`${API_URL}/teams`);
+                const data = await response.json();
+                const teams = data.teams;
+                
+                let options = "";
+                teams.forEach(team => {
+                    options += `<option value="${team}">${team}</option>`;
+                });
+
+                document.getElementById("team1").innerHTML = options;
+                document.getElementById("team2").innerHTML = options;
+                
+                // Set default Team 2 to be different
+                if(teams.length > 1) document.getElementById("team2").value = teams[1];
+                
+                updateTossOptions();
+            } catch (error) {
+                alert("Error connecting to backend! Make sure api.py is running.");
+            }
+        };
+
+        // 2. Update Toss Dropdown based on selected teams
+        function updateTossOptions() {
+            const t1 = document.getElementById("team1").value;
+            const t2 = document.getElementById("team2").value;
+            const tossSelect = document.getElementById("toss_winner");
+            tossSelect.innerHTML = `<option value="${t1}">${t1}</option><option value="${t2}">${t2}</option>`;
+        }
+
+        // 3. Send Prediction Request
+        async function predictMatch() {
+            const resultDiv = document.getElementById("result");
+            resultDiv.classList.add("hidden");
+
+            const payload = {
+                team1: document.getElementById("team1").value,
+                team2: document.getElementById("team2").value,
+                toss_winner: document.getElementById("toss_winner").value,
+                toss_decision: document.getElementById("toss_decision").value
+            };
+
+            try {
+                const response = await fetch(`${API_URL}/predict`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload)
+                });
+
+                const data = await response.json();
+
+                // Show Results
+                document.getElementById("winner_name").innerText = data.winner;
+                document.getElementById("win_prob").innerText = data.probability + "%";
+                document.getElementById("s1").innerText = data.score_inning_1;
+                document.getElementById("s2").innerText = data.score_inning_2;
+                
+                resultDiv.classList.remove("hidden");
+                
+            } catch (error) {
+                alert("Prediction Failed: " + error);
+            }
+        }
+    </script>
+</body>
+</html>
