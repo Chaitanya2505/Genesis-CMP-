@@ -1,14 +1,14 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
-import joblib
+import pickle
 import pandas as pd
 
 app = FastAPI()
 
 # Load model
-model = joblib.load("backend/models/winner_model.pkl")
-feature_columns = joblib.load("backend/models/feature_columns.pkl")
-label_encoder = joblib.load("backend/models/label_encoder.pkl")
+model = pickle.load(open("../models/winner_model.pkl", "rb"))
+feature_columns = pickle.load(open("../models/feature_columns.pkl", "rb"))
+label_encoder = pickle.load(open("../models/label_encoder.pkl", "rb"))
 
 class MatchInput(BaseModel):
     team1: str
