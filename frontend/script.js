@@ -1,7 +1,7 @@
 // Frontend script for Genesis IPL Predictor
 // Replace 'https://your-render-api-url' with your actual Render API URL after deployment
 
-const API_URL = 'https://your-render-api-url'; // Update this after deploying backend on Render
+const API_URL = 'https://genesis-cmp.onrender.com'; // Update this after deploying backend on Render
 
 // Function to predict match winner
 async function predictMatch(team1, team2, tossWinner, battingFirst, firstInningsScore) {
