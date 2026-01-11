@@ -1,0 +1,11 @@
+{
+  "name": "genesis-frontend",
+  "version": "1.0.0",
+  "description": "Frontend for Genesis IPL Predictor",
+  "main": "index.html",
+  "scripts": {
+    "dev": "echo 'No dev script'",
+    "build": "echo 'No build script'",
+    "start": "echo 'Static site'"
+  }
+}
